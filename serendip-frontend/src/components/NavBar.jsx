@@ -33,7 +33,7 @@ const Navbar = () => {
           <Link to="/" className="flex items-center space-x-2">
             <Map className="w-8 h-8 text-primary-500" />
             <span className="font-bold text-lg sm:text-xl bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
-              Sri Lanka Explorer
+              Serendip AI
             </span>
           </Link>
 

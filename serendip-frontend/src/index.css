@@ -54,10 +54,8 @@
   }
 
   @keyframes fadeIn {
-<<<<<<< Updated upstream
     0% { opacity: 0; }
     100% { opacity: 1; }
-=======
     from { opacity: 0; }
     to { opacity: 1; }
   }
@@ -149,6 +147,6 @@
 
   ::-webkit-scrollbar-thumb:hover {
     background-color: #6b7280;
->>>>>>> Stashed changes
+
   }
 }

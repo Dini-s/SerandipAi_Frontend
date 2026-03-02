@@ -1,42 +1,39 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React, { lazy, Suspense } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+import { AuthProvider } from './context/AuthContext';
+import { LanguageProvider } from './context/LanguageContext';
+import { useResponsive } from './hooks/useResponsive';
+import ProtectedRoute from './components/auth/ProtectedRoute';
+
+// Lazy load components
+//const TouristMap = lazy(() => import('./components/TouristMap'));
+const Login = lazy(() => import('./components/auth/Login'));
+const Register = lazy(() => import('./components/auth/Register'));
+const Navbar = lazy(() => import('./components/NavBar'));
+const MobileNav = lazy(() => import('./components/mobileNav'));
+
+// Loading component
+const LoadingSpinner = () => (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="relative">
+      <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-500"></div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="h-8 w-8 bg-primary-500 rounded-full animate-pulse"></div>
+      </div>
+    </div>
+  </div>
+);
 
 function App() {
-  const [count, setCount] = useState(0)
+  const { isMobile } = useResponsive();
 
   return (
-<<<<<<< Updated upstream
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1 className='text-amber-300'>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-=======
     <AuthProvider>
       <LanguageProvider>
         <Router>
           <div className="min-h-screen bg-gradient-to-b from-green-50 to-blue-50">
-            {/* Navbars */}
+            {/* Navbar */}
             <Suspense fallback={null}>
               <Navbar />
             </Suspense>
@@ -101,7 +98,6 @@ function App() {
       </LanguageProvider>
     </AuthProvider>
   );
->>>>>>> Stashed changes
 }
 
-export default App
+export default App;
