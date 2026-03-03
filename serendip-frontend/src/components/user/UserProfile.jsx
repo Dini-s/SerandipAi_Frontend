@@ -5,13 +5,11 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useResponsive } from '../../hooks/useResponsive';
 import { 
   User, Mail, Phone, MapPin, Globe, Calendar, 
-  Edit2, Save, X, Camera, Heart, Settings, LogOut,
-  ChevronRight, Moon, Sun, Bell, Shield, Languages
+  Edit2, Save, X, Camera, Heart, LogOut, Star
 } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import LoadingSpinner from '../ui/LoadingSpinner';
-import { updateUserProfile, uploadProfileImage } from '../../services/userAPI';
 import { toast } from 'react-hot-toast';
 
 const UserProfile = ({ onLogout }) => {
@@ -32,6 +30,16 @@ const UserProfile = ({ onLogout }) => {
   });
   const [profileImage, setProfileImage] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const [stats, setStats] = useState({
+    favorites: 0,
+    placesVisited: 0,
+    reviews: 0
+  });
+
+  // Get token from localStorage
+  const getToken = () => {
+    return localStorage.getItem('token');
+  };
 
   useEffect(() => {
     if (user) {
@@ -45,7 +53,24 @@ const UserProfile = ({ onLogout }) => {
       });
       setPreviewImage(user.profileImgUrl?.url || null);
     }
+    fetchUserStats();
   }, [user, preferredLanguage]);
+
+  const fetchUserStats = async () => {
+    try {
+      // Fetch favorites from localStorage
+      const favorites = JSON.parse(localStorage.getItem('favorites') || '[]').length;
+      
+      // You can replace these with actual API calls when you have endpoints
+      setStats({
+        favorites,
+        placesVisited: 12, // This should come from your API
+        reviews: 8 // This should come from your API
+      });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -68,23 +93,62 @@ const UserProfile = ({ onLogout }) => {
     await handleImageUpload(file);
   };
 
+  // Upload profile image
   const handleImageUpload = async (file) => {
     setUploadingImage(true);
     try {
       const formData = new FormData();
       formData.append('image', file);
       
-      const response = await uploadProfileImage(formData);
-      if (response.data) {
-        updateUser({ profileImgUrl: response.data.profileImgUrl });
+      const token = getToken();
+      
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/user/upload-profile`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to upload image');
+      }
+
+      if (data) {
+        // Update user in context
+        updateUser({ profileImgUrl: data.profileImgUrl });
         toast.success('Profile picture updated!');
       }
     } catch (error) {
       console.error('Error uploading image:', error);
-      toast.error('Failed to upload image');
+      toast.error(error.message || 'Failed to upload image');
     } finally {
       setUploadingImage(false);
     }
+  };
+
+  // Update user profile
+  const updateUserProfile = async (userData) => {
+    const token = getToken();
+    
+    const response = await fetch(`${API_BASE_URL}/user/profile`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(userData)
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to update profile');
+    }
+
+    return data;
   };
 
   const handleSubmit = async (e) => {
@@ -92,15 +156,15 @@ const UserProfile = ({ onLogout }) => {
     setLoading(true);
     
     try {
-      const response = await updateUserProfile(formData);
-      if (response.data) {
-        updateUser(response.data.user);
+      const data = await updateUserProfile(formData);
+      if (data.user) {
+        updateUser(data.user);
         toast.success('Profile updated successfully!');
         setIsEditing(false);
       }
     } catch (error) {
       console.error('Error updating profile:', error);
-      toast.error('Failed to update profile');
+      toast.error(error.message || 'Failed to update profile');
     } finally {
       setLoading(false);
     }
@@ -373,9 +437,7 @@ const UserProfile = ({ onLogout }) => {
                 <Heart className="w-6 h-6 text-blue-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-800">
-                  {JSON.parse(localStorage.getItem('favorites') || '[]').length}
-                </p>
+                <p className="text-2xl font-bold text-gray-800">{stats.favorites}</p>
                 <p className="text-sm text-gray-500">Favorites</p>
               </div>
             </div>
@@ -387,7 +449,7 @@ const UserProfile = ({ onLogout }) => {
                 <MapPin className="w-6 h-6 text-green-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-800">12</p>
+                <p className="text-2xl font-bold text-gray-800">{stats.placesVisited}</p>
                 <p className="text-sm text-gray-500">Places Visited</p>
               </div>
             </div>
@@ -399,7 +461,7 @@ const UserProfile = ({ onLogout }) => {
                 <Star className="w-6 h-6 text-purple-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-800">8</p>
+                <p className="text-2xl font-bold text-gray-800">{stats.reviews}</p>
                 <p className="text-sm text-gray-500">Reviews</p>
               </div>
             </div>

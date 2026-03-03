@@ -306,13 +306,53 @@ const TouristMap = () => {
     }
   };
 
-  const toggleFavorite = (placeId) => {
-    const newFavorites = favorites.includes(placeId)
-      ? favorites.filter(id => id !== placeId)
-      : [...favorites, placeId];
-    
-    setFavorites(newFavorites);
-    localStorage.setItem('favorites', JSON.stringify(newFavorites));
+  const toggleFavorite = async (placeId) => {
+      const isCurrentlyFavorite = favorites.includes(placeId);
+      
+      // Update local state
+      const newFavorites = isCurrentlyFavorite
+          ? favorites.filter(id => id !== placeId)
+          : [...favorites, placeId];
+      
+      setFavorites(newFavorites);
+      localStorage.setItem('favorites', JSON.stringify(newFavorites));
+      
+      // Track the activity if user is logged in
+      if (user) {
+          try {
+              await axios.post(
+                  `${import.meta.env.VITE_API_BASE_URL}/activity/`,
+                  {
+                      touristPlaceId: placeId,
+                      action: isCurrentlyFavorite ? 'unfavorite' : 'favorite',
+                      language: preferredLanguage,
+                  },
+                  {
+                      headers: { 
+                          Authorization: `Bearer ${localStorage.getItem('token')}` 
+                      },
+                  }
+              );
+              
+              toast.success(
+                  isCurrentlyFavorite 
+                      ? 'Removed from favorites' 
+                      : 'Added to favorites'
+              );
+          } catch (error) {
+              console.error('Error tracking favorite:', error);
+              // Revert local state if tracking fails
+              setFavorites(isCurrentlyFavorite ? [...favorites, placeId] : favorites.filter(id => id !== placeId));
+              localStorage.setItem('favorites', JSON.stringify(isCurrentlyFavorite ? [...favorites, placeId] : favorites.filter(id => id !== placeId)));
+              toast.error('Failed to update favorite');
+          }
+      } else {
+          toast.success(
+              isCurrentlyFavorite 
+                  ? 'Removed from favorites' 
+                  : 'Added to favorites (saved locally)'
+          );
+      }
   };
 
   const handleMarkerClick = (place) => {
