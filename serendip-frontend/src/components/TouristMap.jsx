@@ -5,9 +5,11 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useResponsive } from '../hooks/useResponsive';
+import { useTranslation } from '../hooks/useTranslation';
 import { 
   Search, Mic, MicOff, Menu, X, Navigation, 
-  Compass, Map, Layers, Star, Filter, MapPin 
+  Layers, Star, MapPin, Volume2, VolumeX,
+  Globe, Loader, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 // Set Mapbox token
@@ -18,6 +20,7 @@ const TouristMap = () => {
   const map = useRef(null);
   const markers = useRef({});
   const searchInputRef = useRef(null);
+  const audioRef = useRef(null);
 
   const [places, setPlaces] = useState([]);
   const [filteredPlaces, setFilteredPlaces] = useState([]);
@@ -30,10 +33,16 @@ const TouristMap = () => {
   const [userLocation, setUserLocation] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const [activeCategory, setActiveCategory] = useState('all');
+  const [translatedDescription, setTranslatedDescription] = useState('');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [nearbyPlaces, setNearbyPlaces] = useState([]);
 
   const { user } = useAuth();
-  const { preferredLanguage } = useLanguage();
+  const { preferredLanguage, languages } = useLanguage();
   const { isMobile, isTablet, isDesktop } = useResponsive();
+  const { translate, speak, isTranslating, isSpeaking } = useTranslation();
 
   // Map styles
   const mapStyles = {
@@ -54,12 +63,19 @@ const TouristMap = () => {
     { id: 'waterfall', name: 'Waterfalls', icon: '💧' },
   ];
 
-  // Fetch places
+  // Fetch places from backend
   useEffect(() => {
     fetchPlaces();
     getUserLocation();
     loadFavorites();
   }, []);
+
+  // Translate description when selected place or language changes
+  useEffect(() => {
+    if (selectedPlace && selectedPlace.description) {
+      handleTranslate(selectedPlace.description);
+    }
+  }, [selectedPlace, preferredLanguage]);
 
   // Initialize map
   useEffect(() => {
@@ -149,10 +165,17 @@ const TouristMap = () => {
     }
   }, [filteredPlaces, favorites, map.current]);
 
+  // Fetch nearby places when user location changes
+  useEffect(() => {
+    if (userLocation) {
+      fetchNearbyPlaces(userLocation.lat, userLocation.lng);
+    }
+  }, [userLocation]);
+
   const fetchPlaces = async () => {
     try {
-      const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/tourist-places`);
-      console.log('API Response:', response.data); // Debug log
+      const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/touristPlace/`);
+      console.log('API Response:', response.data);
       
       // Handle different response structures
       let placesData = [];
@@ -164,7 +187,7 @@ const TouristMap = () => {
         placesData = response.data.places;
       }
       
-      console.log('Processed places:', placesData); // Debug log
+      console.log('Processed places:', placesData);
       
       setPlaces(placesData);
       setFilteredPlaces(placesData);
@@ -174,6 +197,25 @@ const TouristMap = () => {
       setFilteredPlaces([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchNearbyPlaces = async (lat, lng) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_BASE_URL}/touristPlace/nearby?lat=${lat}&lng=${lng}&distance=10000`
+      );
+      
+      let nearbyData = [];
+      if (Array.isArray(response.data)) {
+        nearbyData = response.data;
+      } else if (response.data && Array.isArray(response.data.data)) {
+        nearbyData = response.data.data;
+      }
+      
+      setNearbyPlaces(nearbyData);
+    } catch (error) {
+      console.error('Error fetching nearby places:', error);
     }
   };
 
@@ -204,18 +246,15 @@ const TouristMap = () => {
   };
 
   const updateMarkers = () => {
-    // Safety check
     if (!filteredPlaces || !Array.isArray(filteredPlaces)) {
       console.warn('filteredPlaces is not an array:', filteredPlaces);
       return;
     }
 
-    // Clear existing markers
     Object.values(markers.current).forEach(marker => marker.remove());
     markers.current = {};
 
     filteredPlaces.forEach((place) => {
-      // Skip if place doesn't have valid coordinates
       if (!place.location || !place.location.coordinates || !Array.isArray(place.location.coordinates)) {
         console.warn('Invalid place coordinates:', place);
         return;
@@ -223,7 +262,6 @@ const TouristMap = () => {
 
       const isFavorite = favorites.includes(place._id);
       
-      // Create custom marker element
       const el = document.createElement('div');
       el.className = 'marker';
       el.innerHTML = `
@@ -239,17 +277,9 @@ const TouristMap = () => {
               <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
             </svg>
           </div>
-          ${!isMobile ? `
-            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block">
-              <div class="bg-white px-3 py-1 rounded-lg shadow-lg text-sm font-semibold whitespace-nowrap">
-                ${place.name || 'Unknown'}
-              </div>
-            </div>
-          ` : ''}
         </div>
       `;
 
-      // Create popup
       const popup = new mapboxgl.Popup({
         offset: 25,
         closeButton: true,
@@ -269,7 +299,6 @@ const TouristMap = () => {
         </div>
       `);
 
-      // Add marker to map
       const marker = new mapboxgl.Marker(el)
         .setLngLat(place.location.coordinates)
         .setPopup(popup)
@@ -277,9 +306,9 @@ const TouristMap = () => {
 
       markers.current[place._id] = marker;
 
-      // Handle marker click
       el.addEventListener('click', () => {
         setSelectedPlace(place);
+        setCurrentImageIndex(0);
         trackActivity(place._id, 'viewed');
       });
     });
@@ -301,31 +330,22 @@ const TouristMap = () => {
     }
   };
 
-  const handleSearch = useCallback((query) => {
-    setSearchQuery(query);
-    
-    if (!query.trim()) {
-      setFilteredPlaces(places);
+  const handleTranslate = async (text) => {
+    if (preferredLanguage === 'en') {
+      setTranslatedDescription(text);
       return;
     }
-
-    const filtered = places.filter(place =>
-      place.name?.toLowerCase().includes(query.toLowerCase()) ||
-      place.description?.toLowerCase().includes(query.toLowerCase()) ||
-      place.category?.toLowerCase().includes(query.toLowerCase())
-    );
     
-    setFilteredPlaces(filtered);
+    const translated = await translate(text, preferredLanguage);
+    setTranslatedDescription(translated);
+  };
 
-    // Fly to first result if only one
-    if (filtered.length === 1 && map.current) {
-      map.current.flyTo({
-        center: filtered[0].location?.coordinates || [80.7718, 7.8731],
-        zoom: 14,
-        duration: 2000,
-      });
+  const handleSpeak = async () => {
+    const textToSpeak = translatedDescription || selectedPlace?.description;
+    if (textToSpeak) {
+      await speak(textToSpeak, preferredLanguage);
     }
-  }, [places]);
+  };
 
   const handleVoiceSearch = () => {
     if (!isListening) {
@@ -348,6 +368,31 @@ const TouristMap = () => {
       setIsListening(false);
     }
   };
+
+  const handleSearch = useCallback((query) => {
+    setSearchQuery(query);
+    
+    if (!query.trim()) {
+      setFilteredPlaces(places);
+      return;
+    }
+
+    const filtered = places.filter(place =>
+      place.name?.toLowerCase().includes(query.toLowerCase()) ||
+      place.description?.toLowerCase().includes(query.toLowerCase()) ||
+      place.category?.toLowerCase().includes(query.toLowerCase())
+    );
+    
+    setFilteredPlaces(filtered);
+
+    if (filtered.length === 1 && map.current) {
+      map.current.flyTo({
+        center: filtered[0].location?.coordinates || [80.7718, 7.8731],
+        zoom: 14,
+        duration: 2000,
+      });
+    }
+  }, [places]);
 
   const handleCategoryFilter = (categoryId) => {
     setActiveCategory(categoryId);
@@ -374,7 +419,6 @@ const TouristMap = () => {
       const filtered = places.filter(p => p.province === province);
       setFilteredPlaces(filtered);
       
-      // Province centers
       const centers = {
         'Central': [80.6337, 7.2906],
         'Northern': [80.0255, 9.6615],
@@ -419,6 +463,18 @@ const TouristMap = () => {
     
     setFavorites(newFavorites);
     localStorage.setItem('favorites', JSON.stringify(newFavorites));
+  };
+
+  const nextImage = () => {
+    if (selectedPlace?.images && currentImageIndex < selectedPlace.images.length - 1) {
+      setCurrentImageIndex(prev => prev + 1);
+    }
+  };
+
+  const prevImage = () => {
+    if (currentImageIndex > 0) {
+      setCurrentImageIndex(prev => prev - 1);
+    }
   };
 
   if (loading) {
@@ -505,6 +561,13 @@ const TouristMap = () => {
             <div className="mt-2 text-xs sm:text-sm text-gray-500">
               Found {filteredPlaces?.length || 0} places
             </div>
+
+            {/* Nearby places count */}
+            {nearbyPlaces.length > 0 && (
+              <div className="mt-2 text-xs text-green-600">
+                🏃 {nearbyPlaces.length} places near you
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -512,9 +575,12 @@ const TouristMap = () => {
       {/* Categories Filter - Desktop */}
       {!isMobile && (
         <div className="absolute top-4 right-4 z-10">
-          <div className="bg-white/90 backdrop-blur rounded-2xl shadow-xl p-4">
-            <h3 className="font-semibold mb-3 text-sm">Categories</h3>
-            <div className="space-y-2">
+          <div className="bg-white/90 backdrop-blur rounded-2xl shadow-xl p-4 max-w-xs">
+            <h3 className="font-semibold mb-3 text-sm flex items-center">
+              <Globe className="w-4 h-4 mr-1" />
+              Categories
+            </h3>
+            <div className="space-y-1 max-h-96 overflow-y-auto">
               {categories.map((category) => (
                 <button
                   key={category.id}
@@ -618,7 +684,7 @@ const TouristMap = () => {
         </div>
       )}
 
-      {/* Selected Place Details */}
+      {/* Selected Place Details with Voice */}
       {selectedPlace && (
         <div className={`
           absolute z-20
@@ -640,19 +706,71 @@ const TouristMap = () => {
                 <X className="w-4 h-4" />
               </button>
 
-              {/* Place Image */}
-              {selectedPlace.images && selectedPlace.images[0] && (
-                <img
-                  src={selectedPlace.images[0]}
-                  alt={selectedPlace.name}
-                  className="w-full h-32 sm:h-40 md:h-48 object-cover rounded-lg mb-3"
-                />
+              {/* Image Gallery */}
+              {selectedPlace.images && selectedPlace.images.length > 0 && (
+                <div className="relative mb-3">
+                  <img
+                    src={selectedPlace.images[currentImageIndex]}
+                    alt={selectedPlace.name}
+                    className="w-full h-32 sm:h-40 md:h-48 object-cover rounded-lg"
+                  />
+                  
+                  {/* Image Navigation */}
+                  {selectedPlace.images.length > 1 && (
+                    <>
+                      <button
+                        onClick={prevImage}
+                        className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-1 rounded-full hover:bg-black/70"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={nextImage}
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-1 rounded-full hover:bg-black/70"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                      
+                      {/* Image Indicators */}
+                      <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1">
+                        {selectedPlace.images.map((_, idx) => (
+                          <div
+                            key={idx}
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              idx === currentImageIndex ? 'bg-white' : 'bg-white/50'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
 
               {/* Place Info */}
-              <h2 className="text-lg sm:text-xl md:text-2xl font-bold pr-8">
-                {selectedPlace.name}
-              </h2>
+              <div className="flex justify-between items-start">
+                <h2 className="text-lg sm:text-xl md:text-2xl font-bold pr-8">
+                  {selectedPlace.name}
+                </h2>
+                
+                {/* Voice Button */}
+                <button
+                  onClick={handleSpeak}
+                  disabled={isSpeaking || isTranslating}
+                  className={`p-2 rounded-full transition-colors ${
+                    isSpeaking 
+                      ? 'bg-red-100 text-red-600 animate-pulse' 
+                      : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                  }`}
+                  title={isSpeaking ? 'Speaking...' : 'Listen to description'}
+                >
+                  {isSpeaking ? (
+                    <Volume2 className="w-5 h-5 animate-pulse" />
+                  ) : (
+                    <Volume2 className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
               
               <div className="flex flex-wrap gap-2 mt-2">
                 <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
@@ -663,9 +781,20 @@ const TouristMap = () => {
                 </span>
               </div>
 
-              <p className="mt-3 text-sm sm:text-base text-gray-600">
-                {selectedPlace.description}
-              </p>
+              {/* Description with Translation Status */}
+              <div className="mt-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-xs font-medium text-gray-500">
+                    {preferredLanguage !== 'en' ? `Translated to ${preferredLanguage}` : 'Description'}
+                  </p>
+                  {isTranslating && (
+                    <Loader className="w-3 h-3 animate-spin text-blue-500" />
+                  )}
+                </div>
+                <p className="text-sm sm:text-base text-gray-600">
+                  {translatedDescription || selectedPlace.description}
+                </p>
+              </div>
 
               {/* Action Buttons */}
               <div className="flex gap-2 mt-4">
@@ -694,6 +823,13 @@ const TouristMap = () => {
                   Directions
                 </button>
               </div>
+
+              {/* Language Info */}
+              {preferredLanguage !== 'en' && (
+                <div className="mt-3 text-xs text-gray-400 text-center">
+                  🌐 Description translated to {languages.find(l => l.code === preferredLanguage)?.name || preferredLanguage}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -703,6 +839,25 @@ const TouristMap = () => {
       {isMobile && searchQuery && (
         <div className="absolute top-20 left-2 right-2 z-10 bg-white/90 backdrop-blur rounded-lg p-2 text-center text-sm">
           Found {filteredPlaces?.length || 0} places matching "{searchQuery}"
+        </div>
+      )}
+
+      {/* Nearby Places Indicator */}
+      {!isMobile && nearbyPlaces.length > 0 && !selectedPlace && (
+        <div className="absolute bottom-4 left-4 z-10 bg-white/90 backdrop-blur rounded-lg p-3 shadow-lg">
+          <h4 className="font-semibold text-sm mb-2">📍 Near You</h4>
+          <div className="space-y-2 max-w-xs">
+            {nearbyPlaces.slice(0, 3).map(place => (
+              <button
+                key={place._id}
+                onClick={() => setSelectedPlace(place)}
+                className="w-full text-left text-xs hover:bg-gray-100 p-2 rounded transition-colors"
+              >
+                <div className="font-medium">{place.name}</div>
+                <div className="text-gray-500">{place.category} • {place.province}</div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

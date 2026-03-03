@@ -64,7 +64,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/auth/register`, userData);
+      const response = await axios.post(`http://localhost:8081/api/auth/register`, userData);
       toast.success('Registration successful! Please login.');
       return { success: true, data: response.data };
     } catch (error) {
