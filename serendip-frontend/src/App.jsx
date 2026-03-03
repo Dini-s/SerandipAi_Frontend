@@ -7,8 +7,10 @@ import { useResponsive } from './hooks/useResponsive';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 
 // Lazy load components
-//const TouristMap = lazy(() => import('./components/TouristMap'));
+const TouristMap = lazy(() => import('./components/TouristMap'));
 const Login = lazy(() => import('./components/auth/Login'));
+const FavoritesPage = lazy(() => import('./components/user/FavoritesPage'));
+const UserProfile=lazy(()=>import('./components/user/UserProfile'));
 const Register = lazy(() => import('./components/auth/Register'));
 const Navbar = lazy(() => import('./components/NavBar'));
 const MobileNav = lazy(() => import('./components/mobileNav'));
@@ -42,25 +44,26 @@ function App() {
             <main className={`${!isMobile ? 'pt-16' : ''} pb-16 md:pb-0 transition-all duration-300`}>
               <Suspense fallback={<LoadingSpinner />}>
                 <Routes>
-                  {/*<Route path="/" element={<TouristMap />} />*/}
+                  <Route path="/" element={<TouristMap />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
-                  {/*<Route 
+                   <Route 
                     path="/favorites" 
                     element={
                       <ProtectedRoute>
-                        <TouristMap favoritesView />
+                        <FavoritesPage /> 
                       </ProtectedRoute>
                     } 
-                  />*/}
+                  />
                   <Route 
                     path="/profile" 
                     element={
                       <ProtectedRoute>
-                        <div>Profile Page (Coming Soon)</div>
+                        <UserProfile />
                       </ProtectedRoute>
                     } 
                   />
+                  
                   <Route 
                     path="/settings" 
                     element={
